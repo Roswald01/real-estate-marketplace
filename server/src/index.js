@@ -1,7 +1,12 @@
 import express from "express";
 import cors from "cors";
+//cross origin resource sharing
 //If you don't use CORS on the backend, when your React app tries to fetch property listings, the browser blocks it and throws error 
 import dotenv from "dotenv";
+
+import "./db.js";
+
+import { initDB } from "./schema.js";
 
 dotenv.config();
 const app = express();
@@ -17,6 +22,8 @@ app.get("/api/health", (req, res) => {
     timestamp: new Date().toISOString()
   });
 });
-app.listen(PORT, () => {
+app.listen(PORT, async() => {
   console.log(`Server is listening on http://localhost:${PORT}`);
+
+  await initDB();
 });
