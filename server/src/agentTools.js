@@ -72,9 +72,9 @@ export const getAvailableProperties = async ({ city }) => {
   return { properties: rows };
 };
 
-// Tool 2: Qualify tenant and book viewing slot
+// Tool 2: Qualify tenant and book viewing slot (with 45-min conflict buffer)
 export const bookViewing = async ({ propertyId, tenantName, tenantEmail, monthlyIncome, slotTime }) => {
-  // A. Check if the property exists
+  // A. Check if property exists
   const propRes = await query("SELECT * FROM properties WHERE id = $1 AND is_available = TRUE", [propertyId]);
   if (propRes.rows.length === 0) {
     return { error: "Property not found or is no longer available." };
@@ -103,7 +103,24 @@ export const bookViewing = async ({ propertyId, tenantName, tenantEmail, monthly
     };
   }
 
-  // E. Try to book viewing slot (PostgreSQL UNIQUE constraint catches double-booking)
+  // E. 45-MINUTE BUFFER CHECK: Ensure no viewing overlaps within 45 minutes
+  const conflictCheck = await query(
+    `SELECT slot_time FROM viewings
+     WHERE property_id = $1
+       AND status = 'CONFIRMED'
+       AND slot_time >= ($2::timestamp - INTERVAL '45 minutes')
+       AND slot_time <= ($2::timestamp + INTERVAL '45 minutes');`,
+    [propertyId, slotTime]
+  );
+
+  if (conflictCheck.rows.length > 0) {
+    const existingSlot = conflictCheck.rows[0].slot_time;
+    return {
+      error: `This property already has a viewing scheduled near that time (existing booking at ${new Date(existingSlot).toISOString()}). Each viewing requires a 45-minute window. Please ask the tenant for an alternate slot at least 45 minutes before or after.`
+    };
+  }
+
+  // F. Insert confirmed viewing
   try {
     const viewingRes = await query(
       `INSERT INTO viewings (property_id, lead_id, slot_time, status)
@@ -120,10 +137,9 @@ export const bookViewing = async ({ propertyId, tenantName, tenantEmail, monthly
       message: "Viewing booked successfully!"
     };
   } catch (err) {
-    // Error code '23505' in PostgreSQL is a Unique Constraint Violation
     if (err.code === "23505") {
       return {
-        error: "This time slot is already booked for this property. Please ask the tenant for an alternate time."
+        error: "This exact time slot is already booked. Please ask the tenant for an alternate time."
       };
     }
     throw err;
