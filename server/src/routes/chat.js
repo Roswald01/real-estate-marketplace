@@ -3,7 +3,7 @@ import { chatWithAgent } from "../agent.js";
 
 const router = express.Router();
 
-// POST /api/chat -> Send message to Haven AI Agent
+// POST /api/chat -> Send message toI Agent
 router.post("/", async (req, res) => {
   try {
     const { message, history } = req.body;
